@@ -29,7 +29,7 @@ endif
 
 fsrcs	:= $(wildcard $(srcdir)/*.f)
 fobjs	:= $(subst $(srcdir)/,$(tmpdir)/,$(fsrcs:.f=.o))
- 
+
 ccsrcs	:= $(wildcard $(srcdir)/*.cc) 
 ccobjs	:= $(subst $(srcdir)/,$(tmpdir)/,$(ccsrcs:.cc=.o))
 
@@ -52,7 +52,12 @@ sharedlib := $(libdir)/lib$(name).so
 # 	Define which compilers and linkers to use
 
 # 	C++ Compiler
+COMPILER:= $(shell which clang++)
+ifneq ($(COMPILER),)
 CXX	:= clang++
+else
+CXX	:= g++
+endif
 
 CINT    := rootcint
 
@@ -109,7 +114,7 @@ lib:	$(sharedlib)
 $(sharedlib)	: $(objects)
 	@echo "---> Linking `basename $@`"
 	$(AT)$(LDSHARED) $(LDFLAGS) -fPIC $(objects) $(LIBS) -o $@
-	$(AT)mv $(tmpdir)/*.pcm $(libdir)
+	$(AT)find $(tmpdir) -name "*.pcm" -exec mv {} $(libdir) \;
 
 $(dictobjs)	: %.o	: %.cc
 	@echo "---> Compiling `basename $<`" 

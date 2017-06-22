@@ -11,8 +11,6 @@
 #include <vector>
 #include <map>
 
-//#include "TObject.h"
-
 typedef std::vector<float>  vfloat;
 typedef std::vector<double> vdouble;
 typedef std::vector<int>    vint;
@@ -185,7 +183,7 @@ class Jetnet
   		     vfloat&  out);
     
   /// Return value of network training parameter.
-  float     parameter(std::string name);
+  float    parameter(std::string name);
 
   /// Return names of network inputs.
   vstring  names();
@@ -199,8 +197,8 @@ class Jetnet
   /// Initialize network training.
   bool  begin(std::string name="");
 
-  /// Finalize network training.
-  void  end();
+  /// Save network weights to .jetnet
+  void  save();
     
   /// Train network.
   float train();
@@ -279,7 +277,6 @@ class Jetnet
   Sample  _sample;
   int     _outputType;
   bool    _initialized;
-  //bool    _newnetwork;
 
   vstring _var;    
   vint    _nodes;
@@ -314,8 +311,6 @@ class Jetnet
   void _setpattern(Sample sample);
   void _setParameter(std::string name);
   void _saveCPP(std::string filename);
-
-  //ClassDef(Jetnet,1)
 };
 
 #endif

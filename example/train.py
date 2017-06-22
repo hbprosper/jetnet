@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 #-----------------------------------------------------------------------------
 # File:        train.py
-# Description: test C++ wrapper of JETNET 3.4 fortran code
+# Description: build a shallow neural network to discriminate between ttbar
+#              and non-ttbar events using the ancient JETNET 3.4 fortran code
 # Created:     04-Feb-2006 Harrison B. Prosper
 #              13-Feb-2006 HBP
 #              20-Mar-2014 HBP small update
+#              16-Jun-2016 HBP add more comments
 #-----------------------------------------------------------------------------
 import sys, os
 from string import *
@@ -14,7 +16,7 @@ from ROOT import *
 #------------------------------------------------------------------------------
 SIGFILE= 'ttbar.dat'
 BKGFILE= 'nonttbar.dat'
-NEPOCH = 10000  # Number of epochs
+NEPOCH = 1000   # Number of epochs
 NSTEP  = 10     # Plot every NSTEP epoch
 NTRAIN = 10000  # Number of training events/file
 NHIDDEN= 10     # Number of hidden nodes
@@ -25,21 +27,35 @@ NBIN   = 50
 def error(message):
     sys.exit("*** Error *** %s" % message)
 #-----------------------------------------------------------------------------
+# read from a text file containing a table of numbers. The first line is a
+# header
 def readData(filename):
     print "reading data from %s..." % filename
     records = map(split, open(filename).readlines())
     header  = records[0]
-    records = records[1:]
+    # convert to floating point numbers
+    records = map(lambda x: map(atof, x), records[1:])
+    
     varmap  = {}
     for index, name in enumerate(header):
         varmap[name] = index
+
     return (varmap, records)
+
+def getVarnames(varfile):
+    vlist = filter(lambda x: x != "", map(strip, open(varfile).readlines()))
+    varlist = vector('string')()
+    print "Variables"
+    for x in vlist:
+        print "\t%s" % x
+        varlist.push_back(x)
+    return varlist
 #-----------------------------------------------------------------------------
 def loadNetwork(title,
         varmap,
         sig,
         bkg,
-        vars,
+        variables,
         nrows,
         sample, 
         nn):
@@ -47,20 +63,27 @@ def loadNetwork(title,
 
     nrows = min(nrows, min(len(sig), len(bkg)))
 
-    # Set either Test or Train
+    # Set either test or training sample
     nn.setSample(sample)
 
-    input = vdouble(len(vars))
+    # inputs are a C++ vector of doubles
+    inpvar = vector('double')(len(variables))
 
+    # load signals
+    target = 1
     for record in sig[:nrows]:
-        for i, var in enumerate(vars):
-            input[i] = atof(record[varmap[var]])
-        nn.setPattern(input, 1)
+        for i, var in enumerate(variables):
+            inpvar[i] = record[varmap[var]]
+            
+        nn.setPattern(inpvar, target)
 
+    # load backgrounds
+    target = 0
     for record in bkg[:nrows]:
-        for i, var in enumerate(vars):
-            input[i] = atof(record[varmap[var]])
-        nn.setPattern(input, 0)
+        for i, var in enumerate(variables):
+            inpvar[i] = record[varmap[var]]
+            
+        nn.setPattern(inpvar, target)
 #-----------------------------------------------------------------------------
 class Plot:
 
@@ -76,15 +99,15 @@ class Plot:
         # Network output distributions
 
         self.hs = TH1F("hs", "", nbin, 0, 1)
-        self.hs.SetLineColor(kRed)
+        self.hs.SetLineColor(kAzure+1)
         self.hs.GetXaxis().SetTitle("network output")
-        self.hs.SetFillColor(kRed)
+        self.hs.SetFillColor(kAzure+1)
         self.hs.SetFillStyle(3004)
 
         self.hb = TH1F("hb", "", nbin, 0, 1)
-        self.hb.SetLineColor(kBlue)
+        self.hb.SetLineColor(kMagenta+1)
         self.hb.GetXaxis().SetTitle("network output")        
-        self.hb.SetFillColor(kBlue)
+        self.hb.SetFillColor(kMagenta+1)
         self.hb.SetFillStyle(3005)
 
         # error difference vs epoch number
@@ -92,16 +115,21 @@ class Plot:
         self.cerror = TCanvas("fig_%s_series" % netname,
                       "Time Series", 0, 0, 500, 500)
 
-        self.hd = TH1F("hd", "", kbin, 0, nepoch)
+        self.hd = TH1F("hd", "", nepoch, 0, nepoch)
         self.hd.GetXaxis().SetTitle("epoch")
-        self.hd.GetYaxis().SetTitle("RMS(test) - RMS(train)")           
-        self.hg = TGraph()
-        self.hg.SetLineColor(kBlue)
-        self.hg.SetMarkerStyle(20)
-        self.hg.SetMarkerColor(kBlue)
-        self.hg.SetMarkerSize(0.4)
-        self.emax =-10000.0
-        self.emin = 10000.0
+        self.hd.GetYaxis().SetTitle("RMS")        
+        self.hd.SetMinimum(0)
+        self.hd.SetMaximum(1)
+        
+        self.htrain = TGraph()
+        self.htrain.SetLineColor(kBlue)
+        
+        self.htest = TGraph()
+        self.htest.SetLineColor(kRed)
+
+        self.np = 0
+        self.emin = 1e10
+        self.emax =-1e10
         
     def __del__(self):
         pass
@@ -119,30 +147,32 @@ class Plot:
         self.coutput.cd()
         if hs.GetMaximum() > hb.GetMaximum():
             hs.Draw('hist')
-            hb.Draw("hist SAME")
+            hb.Draw("hist same")
         else:
             hb.Draw('hist')
-            hs.Draw("hist SAME")
+            hs.Draw("hist same")
         self.coutput.Update()
-
+        gSystem.ProcessEvents()
+        
     def series(self, epoch, errortrain, errortest):
-        ediff = errortest-errortrain
-        self.hg.SetPoint(epoch, epoch, ediff)
+        self.np += 1
+        self.htrain.SetPoint(self.np, epoch, errortrain)
+        self.htest.SetPoint(self.np,  epoch, errortest)
 
-        if ediff > self.emax: self.emax = ediff
-        if ediff < self.emin: self.emin = ediff
-
-        if self.emin < 0:
-            hd.SetMinimum(1.05*self.emin)
-        else:
-            hd.SetMinimum(0.95*self.emin)
-        hd.SetMaximum(1.05*self.emax)
+        errmin = min(errortrain, errortest)
+        errmax = max(errortrain, errortest)
+        if errmin < self.emin: self.emin = errmin
+        if errmax > self.emax: self.emax = errmax
+        self.hd.SetMinimum(0.95*self.emin)
+        self.hd.SetMaximum(1.05*self.emax)
         
         self.cerror.cd()
-        self.hd.Draw('hist')
-        self.hg.Draw("p same")
+        self.hd.Draw()
+        self.htrain.Draw("lsame")
+        self.htest.Draw("lsame")
         self.cerror.Update()
-
+        gSystem.ProcessEvents()
+        
     def save(self, gtype=".png"):
         self.coutput.SaveAs(gtype)
         self.cerror.SaveAs(gtype)
@@ -154,7 +184,8 @@ def main():
 
     # load library
 
-    gSystem.Load('libjetnet.so')
+    gSystem.AddDynamicPath("$JETNET_PATH/lib")
+    if gSystem.Load('libjetnet') < 0: error("unable to load libjetnet")
 
     # Set defaults
 
@@ -166,22 +197,14 @@ def main():
 
     if not os.path.exists(bkgfile): error("Can't find %s" % bkgfile)
     if not os.path.exists(sigfile): error("Can't find %s" % sigfile)
-    #-----------------------------------------------------------------------
+
     # Set up plots
 
     plot = Plot(netname, nepoch, NBIN)
 
     #-----------------------------------------------------------------------
-    # Get variable names and data
+    # Get data
     #-----------------------------------------------------------------------
-    vlist = filter(lambda x: x != "",
-               map(strip, open(varfile).readlines()))
-    varlist = vector('string')()
-    print "Variables"
-    for x in vlist:
-        print "\t%s" % x
-        varlist.push_back(x)
-
     varmap, sig = readData(sigfile)
     varmap, bkg = readData(bkgfile)
 
@@ -191,6 +214,8 @@ def main():
     #-----------------------------------------------------------------------
     # Define network
     #-----------------------------------------------------------------------
+    varlist =  getVarnames(varfile)
+    
     nn = Jetnet(varlist, nhidden)
 
     loadNetwork("load training data",
@@ -201,7 +226,7 @@ def main():
             ntrain,
             Jetnet.kTRAINING, nn)
 
-    loadNetwork("load testing data",
+    loadNetwork("load test data",
             varmap,
             sig[ntrain:],
             bkg[ntrain:],
@@ -225,8 +250,9 @@ def main():
 
         if epoch % NSTEP == 0:
 
+            # get RMS errors
             rms0 = nn.test(Jetnet.kTRAINING, 0.5, NBIN)
-            rms1 = nn.test(Jetnet.kTESTING, 0.5, NBIN)
+            rms1 = nn.test(Jetnet.kTESTING,  0.5, NBIN)
 
             kplot += 1
             if kplot == KPLOT:
@@ -234,8 +260,9 @@ def main():
                 print "%10d %10.4f %10.4f" % (epoch, rms0, rms1)
                 plot.hist(nn)        
                 plot.series(epoch, rms0, rms1)
-
-                nn.end()
+                
+                # save weights to .jetnet
+                nn.save()
     plot.save()
 
     #-----------------------------------------------------------------------

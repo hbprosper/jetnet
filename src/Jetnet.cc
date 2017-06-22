@@ -9,7 +9,6 @@
 //          03-Oct-2005 HBP Add option to return error rate
 //          14-Feb-2006 HBP Make it possible to continue training an
 //                      existing network
-// $Revision:$
 //----------------------------------------------------------------------------
 #include <iostream>
 #include <iomanip>
@@ -20,9 +19,7 @@
 #include <stdio.h>
 
 #include "network.h"
-#include "jetnet.h"
-
-//ClassImp(Jetnet)
+#include "Jetnet.h"
 
 using namespace std;
 
@@ -381,13 +378,13 @@ void Jetnet::printParameters(int flag)
     }
   else if ( flag == 1 ) 
     {      
-      for ( int i = 0; i < 40; i++ )
+      for ( int i = 0; i < 40; i+=2 )
 	{
 	  printf
 	    ("mstjn[%2d] = %d\t mstjn[%2d] "
 	     "= %d\t parjn[%2d] = %f\t parjn[%2d] = %f\n",
 	     i+1,jndat1_.mstjn[i], i+2,jndat1_.mstjn[i+1],
-	     i+1,jndat1_.parjn[i], i+2,jndat1_.parjn[i+1]); i++;
+	     i+1,jndat1_.parjn[i], i+2,jndat1_.parjn[i+1]);
 	}
     }
   else
@@ -440,7 +437,7 @@ bool Jetnet::begin(string filename)
   return true;
 }
 
-void Jetnet::end()
+void Jetnet::save()
 {
   save(".jetnet",false);  // do not save cpp file 
   _load(".jetnet",0);     // load weight file in MLP format
